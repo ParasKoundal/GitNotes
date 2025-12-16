@@ -3,6 +3,11 @@ const Icons = {
     sun: `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>`,
     moon: `<svg viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>`,
     coffee: `<svg viewBox="0 0 24 24"><path d="M18 8h1a4 4 0 0 1 0 8h-1"></path><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"></path><line x1="6" y1="1" x2="6" y2="4"></line><line x1="10" y1="1" x2="10" y2="4"></line><line x1="14" y1="1" x2="14" y2="4"></line></svg>`,
+    download: `<svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>`,
+    upload: `<svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>`,
+    info: `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>`,
+    barChart: `<svg viewBox="0 0 24 24"><line x1="12" y1="20" x2="12" y2="10"></line><line x1="18" y1="20" x2="18" y2="4"></line><line x1="6" y1="20" x2="6" y2="16"></line></svg>`,
+    checkSquare: `<svg viewBox="0 0 24 24"><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>`,
     copy: `<svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`,
     check: `<svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg>`,
     trash: `<svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`,
@@ -28,7 +33,7 @@ const Icons = {
 // --- Storage Service (IndexedDB) ---
 const DB_NAME = 'gitnotes-db';
 const STORE_NAME = 'items';
-const DB_VERSION = 2; // Incremented for repoId
+const DB_VERSION = 3; // Incremented for filePath
 
 class Storage {
     constructor() { this.db = null; }
@@ -43,10 +48,14 @@ class Storage {
                     const store = db.createObjectStore(STORE_NAME, { keyPath: 'id' });
                     store.createIndex('timestamp', 'timestamp', { unique: false });
                     store.createIndex('repoId', 'repoId', { unique: false });
+                    store.createIndex('filePath', 'filePath', { unique: false });
                 } else {
                     const store = e.target.transaction.objectStore(STORE_NAME);
                     if (!store.indexNames.contains('repoId')) {
                         store.createIndex('repoId', 'repoId', { unique: false });
+                    }
+                    if (!store.indexNames.contains('filePath')) {
+                        store.createIndex('filePath', 'filePath', { unique: false });
                     }
                 }
             };
@@ -62,9 +71,9 @@ class Storage {
             request.onerror = () => reject(request.error);
         });
     }
-    async add(content, tags = [], title = '', repoId = null) {
+    async add(content, tags = [], title = '', repoId = null, filePath = null, branch = null) {
         if (!this.db) await this.init();
-        const item = { id: crypto.randomUUID(), content, title, timestamp: Date.now(), tags, isPinned: false, history: [], repoId };
+        const item = { id: crypto.randomUUID(), content, title, timestamp: Date.now(), tags, isPinned: false, history: [], repoId, filePath, branch };
         return new Promise((resolve, reject) => {
             const tx = this.db.transaction(STORE_NAME, 'readwrite');
             const store = tx.objectStore(STORE_NAME);
@@ -101,13 +110,16 @@ let theme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-
 let layout = localStorage.getItem('layout') || 'list';
 let density = localStorage.getItem('density') || 'compact'; // Default to compact for side panel
 let repoFilterEnabled = true; // Default to true as requested
-let currentRepo = null;
+let fileFilterEnabled = false;
+let currentContext = { repoId: null, filePath: null, branch: null };
 
 let editingId = null;
 let lastDeletedItem = null;
 let undoTimeout = null;
 let activePanelItem = null;
 let isPanelEditing = false;
+let selectedItems = new Set();
+let bulkMode = false;
 
 // Elements
 const listContainer = document.getElementById('listContainer');
@@ -119,6 +131,7 @@ const themeBtn = document.getElementById('themeBtn');
 const layoutBtn = document.getElementById('layoutBtn');
 const densityBtn = document.getElementById('densityBtn');
 const repoFilterBtn = document.getElementById('repoFilterBtn');
+const fileFilterBtn = document.getElementById('fileFilterBtn');
 const repoContextDisplay = document.getElementById('repoContextDisplay');
 const repoNameSpan = document.getElementById('repoName');
 const charCount = document.getElementById('charCount');
@@ -129,12 +142,43 @@ const sidePanelOverlay = document.getElementById('sidePanelOverlay');
 const saveBtn = document.getElementById('saveBtn');
 const undoBtn = document.getElementById('undoBtn');
 const clearBtn = document.getElementById('clearBtn');
+const exportBtn = document.getElementById('exportBtn');
+const importBtn = document.getElementById('importBtn');
+const statsBtn = document.getElementById('statsBtn');
+const helpBtn = document.getElementById('helpBtn');
+const bulkModeBtn = document.getElementById('bulkModeBtn');
+const bulkActionsBar = document.getElementById('bulkActionsBar');
+const bulkSelectionCount = document.getElementById('bulkSelectionCount');
+const bulkTagBtn = document.getElementById('bulkTagBtn');
+const bulkPinBtn = document.getElementById('bulkPinBtn');
+const bulkExportBtn = document.getElementById('bulkExportBtn');
+const bulkDeleteBtn = document.getElementById('bulkDeleteBtn');
+const bulkDeselectBtn = document.getElementById('bulkDeselectBtn');
 
 // Helper: Detect Type
 function detectType(content) {
     if (content.match(/^https?:\/\/[^\s]+$/)) return { type: 'link', icon: Icons.typeLink };
     if (content.match(/[\{\}\[\]\(\);=><]/) && content.includes('\n')) return { type: 'code', icon: Icons.typeCode };
     return { type: 'text', icon: Icons.typeText };
+}
+
+// Simple Syntax Highlighting
+function highlightCode(code) {
+    // Basic syntax highlighting for common keywords
+    const keywords = /\b(function|const|let|var|if|else|return|import|export|class|async|await|for|while|switch|case|break|continue|try|catch|throw|new|this|super|extends|static|public|private|protected|void|int|string|boolean|true|false|null|undefined)\b/g;
+    const strings = /(".*?"|'.*?'|`.*?`)/g;
+    const comments = /(\/\/.*?$|\/\*[\s\S]*?\*\/)/gm;
+    const numbers = /\b(\d+\.?\d*)\b/g;
+
+    let highlighted = escapeHtml(code);
+
+    // Apply highlighting in reverse order to preserve positions
+    highlighted = highlighted.replace(comments, '<span style="color:#6a737d; font-style:italic;">$1</span>');
+    highlighted = highlighted.replace(strings, '<span style="color:#032f62;">$1</span>');
+    highlighted = highlighted.replace(keywords, '<span style="color:#d73a49; font-weight:600;">$1</span>');
+    highlighted = highlighted.replace(numbers, '<span style="color:#005cc5;">$1</span>');
+
+    return highlighted;
 }
 
 // Helper: Auto Title
@@ -194,18 +238,48 @@ function toggleRepoFilter() {
 }
 repoFilterBtn.addEventListener('click', toggleRepoFilter);
 
+// File Filter
+function toggleFileFilter() {
+    fileFilterEnabled = !fileFilterEnabled;
+    render();
+}
+fileFilterBtn.addEventListener('click', toggleFileFilter);
+
 // GitHub Detection
-async function detectGitHubRepo() {
+async function detectGitHubContext() {
     try {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         if (tab && tab.url && tab.url.includes('github.com')) {
             const url = new URL(tab.url);
             const pathParts = url.pathname.split('/').filter(p => p);
+
+            // Format: /user/repo
             if (pathParts.length >= 2) {
-                currentRepo = `${pathParts[0]}/${pathParts[1]}`;
+                const repoId = `${pathParts[0]}/${pathParts[1]}`;
+                let filePath = null;
+
+                // Check for file/blob/tree
+                // Format: /user/repo/blob/branch/path/to/file
+                // Format: /user/repo/tree/branch/path/to/dir
+                let branch = null;
+                if (pathParts.length > 4 && (pathParts[2] === 'blob' || pathParts[2] === 'tree')) {
+                    // pathParts[3] is branch, rest is path
+                    branch = pathParts[3];
+                    filePath = pathParts.slice(4).join('/');
+                }
+
+                currentContext = { repoId, filePath, branch };
+
                 repoContextDisplay.style.display = 'flex';
                 repoContextDisplay.classList.add('active');
-                repoNameSpan.textContent = currentRepo;
+
+                let contextText = repoId;
+                if (filePath) {
+                    contextText += ` / ${filePath}`;
+                }
+                repoNameSpan.textContent = contextText;
+                repoNameSpan.title = contextText; // Tooltip for long paths
+
                 render();
                 return;
             }
@@ -213,7 +287,7 @@ async function detectGitHubRepo() {
     } catch (e) {
         console.error('Failed to detect repo', e);
     }
-    currentRepo = null;
+    currentContext = { repoId: null, filePath: null, branch: null };
     repoContextDisplay.style.display = 'none';
     repoContextDisplay.classList.remove('active');
     render();
@@ -222,12 +296,12 @@ async function detectGitHubRepo() {
 // Listen for tab updates to refresh repo context
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     if (changeInfo.status === 'complete') {
-        detectGitHubRepo();
+        detectGitHubContext();
     }
 });
 
 chrome.tabs.onActivated.addListener(() => {
-    detectGitHubRepo();
+    detectGitHubContext();
 });
 
 // --- Event Delegation ---
@@ -238,6 +312,15 @@ listContainer.addEventListener('click', (e) => {
     const itemEl = e.target.closest('.item');
     const tagRemove = e.target.closest('.tag-remove');
     const dateHeader = e.target.closest('.date-header');
+    const checkbox = e.target.closest('.bulk-checkbox');
+
+    // Bulk Selection Checkbox
+    if (checkbox) {
+        e.stopPropagation();
+        const id = checkbox.dataset.id;
+        toggleItemSelection(id);
+        return;
+    }
 
     // Date Header Toggle
     if (dateHeader) {
@@ -271,6 +354,7 @@ listContainer.addEventListener('click', (e) => {
         if (action === 'save-edit') saveEdit(id);
         if (action === 'cancel-edit') cancelEdit();
         if (action === 'show-history') showHistory(id);
+        if (action === 'edit-path') editPath(id);
         return;
     }
 
@@ -301,7 +385,14 @@ listContainer.addEventListener('dblclick', (e) => {
         const id = itemEl.id.replace('item-', '');
         const item = items.find(i => i.id === id);
         if (item && item.repoId) {
-            chrome.tabs.create({ url: `https://github.com/${item.repoId}` });
+            // Construct the full GitHub URL with file path if available
+            let githubUrl = `https://github.com/${item.repoId}`;
+            if (item.filePath) {
+                // Use the saved branch, or default to 'main'
+                const branch = item.branch || 'main';
+                githubUrl += `/blob/${branch}/${item.filePath}`;
+            }
+            chrome.tabs.create({ url: githubUrl });
         } else {
             openSidePanel(id);
         }
@@ -349,6 +440,7 @@ sidePanel.addEventListener('click', (e) => {
             const index = parseInt(btn.dataset.index);
             restoreVersion(index);
         }
+        if (action === 'edit-path') editPath(activePanelItem.id);
     }
 });
 
@@ -373,11 +465,12 @@ function renderSidePanel() {
         <span style="display:flex; align-items:center; gap:6px;">${type.icon} ${type.type.toUpperCase()}</span>
         <span>•</span>
         <span>${date}</span>
-        ${item.repoId ? `<span>•</span><span class="repo-badge" data-repo="${item.repoId}" style="font-family:monospace; font-size:10px; background:var(--hover); padding:2px 4px; border-radius:4px; cursor:pointer; user-select:none;" title="Open Repo">${item.repoId}</span>` : ''}
+        ${item.repoId ? `<span>•</span><span class="repo-badge" data-repo="${item.repoId}" style="font-family:monospace; font-size:10px; background:var(--hover); padding:2px 4px; border-radius:4px; cursor:pointer; user-select:none;" title="Open Repo">${item.repoId}${item.filePath ? ' / ' + item.filePath : ''}</span>` : ''}
     `;
 
     document.getElementById('panelActions').innerHTML = `
         <button data-action="enable-panel-edit" data-tooltip="Edit">${Icons.edit}</button>
+        <button data-action="edit-path" data-tooltip="Move/Edit Path" style="font-family:monospace; font-size:12px;">./</button>
         <button data-action="toggle-pin" data-tooltip="${item.isPinned ? 'Unpin' : 'Pin'}">${item.isPinned ? Icons.pinFilled : Icons.pin}</button>
         ${item.history && item.history.length > 0 ? `<button data-action="show-history" data-tooltip="History (${item.history.length})">${Icons.history}</button>` : ''}
         <button data-action="copy-panel" data-tooltip="Copy">${Icons.copy}</button>
@@ -397,7 +490,8 @@ function renderSidePanel() {
         `;
     } else {
         const titleHtml = item.title ? `<div style="font-size:16px; font-weight:600; margin-bottom:16px; font-family:var(--font-sans);">${escapeHtml(item.title)}</div>` : '';
-        document.getElementById('panelContent').innerHTML = titleHtml + escapeHtml(item.content);
+        const contentHtml = type.type === 'code' ? highlightCode(item.content) : escapeHtml(item.content);
+        document.getElementById('panelContent').innerHTML = titleHtml + contentHtml;
     }
 
     document.getElementById('panelFooter').innerHTML = `
@@ -452,15 +546,28 @@ function render() {
     );
 
     // Repo Filter
-    if (repoFilterEnabled && currentRepo) {
-        filtered = filtered.filter(item => item.repoId === currentRepo);
+    if (repoFilterEnabled && currentContext.repoId) {
+        filtered = filtered.filter(item => item.repoId === currentContext.repoId);
         repoFilterBtn.innerHTML = Icons.filter;
         repoFilterBtn.style.color = 'var(--text)';
-        repoFilterBtn.setAttribute('data-tooltip', `Showing notes for ${currentRepo}`);
+        repoFilterBtn.setAttribute('data-tooltip', `Showing notes for ${currentContext.repoId}`);
+        repoFilterBtn.setAttribute('data-tooltip', `Showing notes for ${currentContext.repoId}`);
     } else {
         repoFilterBtn.innerHTML = Icons.filterOff;
         repoFilterBtn.style.color = 'var(--text-sub)';
         repoFilterBtn.setAttribute('data-tooltip', 'Showing all notes');
+    }
+
+    // File Filter
+    if (fileFilterEnabled && currentContext.filePath) {
+        filtered = filtered.filter(item => item.filePath === currentContext.filePath);
+        fileFilterBtn.style.color = 'var(--text)';
+        fileFilterBtn.style.opacity = '1';
+        fileFilterBtn.setAttribute('data-tooltip', `Showing notes for ${currentContext.filePath.split('/').pop()}`);
+    } else {
+        fileFilterBtn.style.color = 'var(--text-sub)';
+        fileFilterBtn.style.opacity = currentContext.filePath ? '0.7' : '0.3'; // Dim if no file context
+        fileFilterBtn.setAttribute('data-tooltip', 'Filter by current file');
     }
 
     const sorted = filtered.sort((a, b) => {
@@ -473,8 +580,14 @@ function render() {
 
     if (sorted.length === 0) {
         listContainer.innerHTML = `<div class="empty-state" style="text-align:center; padding:60px 0; color:var(--text-sub);">
-            <p>${repoFilterEnabled && currentRepo ? `No notes for ${currentRepo}` : 'No items found.'}</p>
+            <p>${repoFilterEnabled && currentContext.repoId ? `No notes for ${currentContext.repoId}` : 'No items found.'}</p>
         </div>`;
+        return;
+    }
+
+    // Tree View for Repo Context
+    if (repoFilterEnabled && currentContext.repoId) {
+        renderTree(sorted);
         return;
     }
 
@@ -504,6 +617,115 @@ function render() {
     }
 }
 
+// --- Tree View Logic ---
+function buildTree(items) {
+    const root = {};
+
+    items.forEach(item => {
+        // If no filePath, put in root
+        const path = item.filePath || '';
+        const parts = path.split('/').filter(p => p);
+
+        let currentLevel = root;
+        parts.forEach((part, index) => {
+            if (!currentLevel[part]) {
+                currentLevel[part] = {
+                    __name: part,
+                    __path: parts.slice(0, index + 1).join('/'),
+                    __children: {},
+                    __items: []
+                };
+            }
+            if (index === parts.length - 1) {
+                currentLevel[part].__items.push(item);
+            }
+            currentLevel = currentLevel[part].__children;
+        });
+
+        if (parts.length === 0) {
+            // Root items
+            if (!root['__root__']) root['__root__'] = { __name: 'Root', __path: '', __children: {}, __items: [] };
+            root['__root__'].__items.push(item);
+        }
+    });
+
+    return root;
+}
+
+function renderTree(items) {
+    const tree = buildTree(items);
+    listContainer.innerHTML = renderTreeLevel(tree);
+}
+
+function renderTreeLevel(level, depth = 0) {
+    let html = '';
+
+    // Sort: Folders first, then files? 
+    // Actually, in our structure, everything in `level` is a node (file or folder)
+    // except __root__.
+
+    const nodes = Object.entries(level).sort((a, b) => {
+        if (a[0] === '__root__') return -1;
+        if (b[0] === '__root__') return 1;
+        return a[0].localeCompare(b[0]);
+    });
+
+    for (const [key, node] of nodes) {
+        const isRoot = key === '__root__';
+        const hasChildren = Object.keys(node.__children).length > 0;
+        const hasItems = node.__items.length > 0;
+
+        if (!hasChildren && !hasItems) continue;
+
+        const indent = depth * 12;
+
+        if (!isRoot) {
+            // Render Folder/File Header
+            const icon = hasChildren ? Icons.open : Icons.typeCode; // Simplified icon logic
+            // Actually, if it has children it's a folder. If it has items but no children, it's likely a file.
+            // But a folder can have items too (if we allow notes on folders? No, user said file specific).
+            // Let's assume nodes with items are files.
+
+            const isFile = hasItems;
+            const folderIcon = isFile ? Icons.typeCode : (hasChildren ? Icons.grid : Icons.list); // Placeholder icons
+
+            html += `
+                <div class="tree-node" style="margin-left:${indent}px; margin-top:4px;">
+                    <div class="tree-header" style="display:flex; align-items:center; gap:6px; padding:4px; border-radius:4px; cursor:pointer; user-select:none; color:var(--text-sub);" onclick="this.nextElementSibling.classList.toggle('hidden')">
+                        <span style="width:16px; height:16px;">${folderIcon}</span>
+                        <span style="font-weight:500; font-size:13px;">${escapeHtml(node.__name)}</span>
+                        <span style="font-size:11px; opacity:0.6;">(${node.__items.length})</span>
+                    </div>
+                    <div class="tree-children">
+            `;
+        } else {
+            html += `<div class="tree-root">`;
+        }
+
+        // Render Items in this node
+        if (node.__items.length > 0) {
+            html += `<div class="tree-items" style="margin-left:${isRoot ? 0 : 12}px; border-left: ${isRoot ? 'none' : '1px solid var(--border)'};">`;
+            node.__items.forEach(item => {
+                html += renderItem(item);
+            });
+            html += `</div>`;
+        }
+
+        // Render Children
+        if (hasChildren) {
+            html += renderTreeLevel(node.__children, isRoot ? depth : depth + 1);
+        }
+
+        if (!isRoot) {
+            html += `</div></div>`;
+        } else {
+            html += `</div>`;
+        }
+    }
+
+    return html;
+}
+
 function renderItem(item) {
     const isLong = item.content.split('\n').length > 4 || item.content.length > 150;
     const isEditing = item.id === editingId;
@@ -515,22 +737,29 @@ function renderItem(item) {
     let classes = `item ${item.isPinned ? 'pinned' : ''}`;
     if (item.content.includes('TODO')) classes += ' highlight-todo';
     if (type.type === 'code') classes += ' highlight-code';
+    if (selectedItems.has(item.id)) classes += ' selected';
+
+    // In tree view (repo context), don't show file path in item as it's grouped
+    const showPath = !repoFilterEnabled || !currentContext.repoId;
 
     return `
         <div class="${classes}" id="item-${item.id}">
             <div class="item-header">
+                ${bulkMode ? `<input type="checkbox" class="bulk-checkbox" data-id="${item.id}" ${selectedItems.has(item.id) ? 'checked' : ''} style="margin-right:8px; cursor:pointer;">` : ''}
                 <div class="item-meta">
                     <span class="type-icon" title="${type.type}">${type.icon}</span>
                     <span class="timestamp" title="${new Date(item.timestamp).toLocaleString()}">
                         ${timeAgo(item.timestamp)}
                         ${item.history && item.history.length > 0 ? `<span data-action="show-history" data-id="${item.id}" title="View History" style="margin-left:4px; cursor:pointer; text-decoration:underline;">(v${item.history.length + 1})</span>` : ''}
                     </span>
-                    ${item.repoId ? `<span class="repo-badge" data-repo="${item.repoId}" style="font-size:9px; background:var(--hover); padding:1px 3px; border-radius:3px; margin-left:4px; cursor:pointer; user-select:none;" title="Open Repo">${item.repoId}</span>` : ''}
+                    ${!repoFilterEnabled && item.repoId ? `<span class="repo-badge" data-repo="${item.repoId}" style="font-size:9px; background:var(--hover); padding:1px 3px; border-radius:3px; margin-left:4px; cursor:pointer; user-select:none;" title="Open Repo">${item.repoId}${item.filePath ? ' / ' + item.filePath.split('/').pop() : ''}</span>` : ''}
+                    ${showPath && !item.repoId && item.filePath ? `<span style="font-size:9px; opacity:0.7; margin-left:4px;" title="${item.filePath}">${item.filePath.split('/').pop()}</span>` : ''}
                 </div>
                 <div class="actions">
                     <button data-action="open-panel" data-id="${item.id}" data-tooltip="Open">${Icons.open}</button>
                     <button data-action="toggle-pin" data-id="${item.id}" data-tooltip="${item.isPinned ? 'Unpin' : 'Pin'}">${item.isPinned ? Icons.pinFilled : Icons.pin}</button>
                     <button data-action="enable-edit" data-id="${item.id}" data-tooltip="Edit">${Icons.edit}</button>
+                    <button data-action="edit-path" data-id="${item.id}" data-tooltip="Move/Edit Path" style="font-family:monospace; font-size:10px;">./</button>
                     <button data-action="copy" data-id="${item.id}" data-tooltip="Copy">${Icons.copy}</button>
                     <button data-action="delete" data-id="${item.id}" data-tooltip="Delete" style="color: var(--accent)">${Icons.trash}</button>
                 </div>
@@ -546,7 +775,7 @@ function renderItem(item) {
             ` : `
                 <div class="content ${isLong ? '' : 'expanded'}" id="content-${item.id}">
                     ${displayTitle ? `<span class="content-title">${escapeHtml(displayTitle)}</span>` : ''}
-                    ${escapeHtml(displayContent)}
+                    ${type.type === 'code' ? highlightCode(displayContent) : escapeHtml(displayContent)}
                 </div>
                 ${isLong ? `<button class="expand-btn visible" data-action="open-panel" data-id="${item.id}">Show more</button>` : ''}
             `}
@@ -583,7 +812,7 @@ async function saveContent() {
     if (content) {
         const tags = tagsStr ? tagsStr.split(',').map(t => t.trim()).filter(t => t) : [];
         // Save with currentRepo context
-        await storage.add(content, tags, title, currentRepo);
+        await storage.add(content, tags, title, currentContext.repoId, currentContext.filePath, currentContext.branch);
         manualInput.value = '';
         tagInput.value = '';
         titleInput.value = '';
@@ -741,6 +970,23 @@ async function saveEdit(id) {
     }
 }
 
+
+
+async function editPath(id) {
+    const item = items.find(i => i.id === id);
+    if (item) {
+        const newPath = prompt('Enter new file path (e.g., src/utils.js) or leave empty for repo root:', item.filePath || '');
+        if (newPath !== null) {
+            item.filePath = newPath.trim() || null;
+            await storage.update(item);
+            await loadItems();
+            if (activePanelItem && activePanelItem.id === id) {
+                renderSidePanel();
+            }
+        }
+    }
+}
+
 // Diff Algorithm
 function diff(text1, text2) {
     const words1 = text1.split(/(\s+)/);
@@ -822,17 +1068,17 @@ function renderHistoryPanel() {
         const versionTitle = ver.title ? `<div style="font-weight:600; margin-bottom:8px;">${escapeHtml(ver.title)}</div>` : '';
 
         return `
-        <div style="border:1px solid var(--border); padding:16px; border-radius:4px; margin-bottom:16px; background:var(--bg);">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; padding-bottom:12px; border-bottom:1px solid var(--border);">
-                <div style="display:flex; flex-direction:column; gap:2px;">
-                    <span style="font-weight:600; font-size:13px;">Version ${item.history.length - idx}</span>
-                    <span style="font-size:11px; color:var(--text-sub);">${new Date(ver.timestamp).toLocaleString()}</span>
+            <div style="border:1px solid var(--border); padding:16px; border-radius:4px; margin-bottom:16px; background:var(--bg);">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; padding-bottom:12px; border-bottom:1px solid var(--border);">
+                    <div style="display:flex; flex-direction:column; gap:2px;">
+                        <span style="font-weight:600; font-size:13px;">Version ${item.history.length - idx}</span>
+                        <span style="font-size:11px; color:var(--text-sub);">${new Date(ver.timestamp).toLocaleString()}</span>
+                    </div>
+                    <button data-action="restore-version" data-index="${item.history.length - 1 - idx}" style="background:var(--hover); border:1px solid var(--border); padding:6px 12px; border-radius:4px; font-size:12px; font-weight:600; cursor:pointer;">Restore</button>
                 </div>
-                <button data-action="restore-version" data-index="${item.history.length - 1 - idx}" style="background:var(--hover); border:1px solid var(--border); padding:6px 12px; border-radius:4px; font-size:12px; font-weight:600; cursor:pointer;">Restore</button>
+                ${versionTitle}
+                <div style="font-family:var(--font-mono); font-size:13px; white-space:pre-wrap; line-height:1.6;">${diffHtml}</div>
             </div>
-            ${versionTitle}
-            <div style="font-family:var(--font-mono); font-size:13px; white-space:pre-wrap; line-height:1.6;">${diffHtml}</div>
-        </div>
         `;
     }).join('');
 
@@ -849,7 +1095,7 @@ function renderHistoryPanel() {
                 ${escapeHtml(item.content)}
             </div>
         </div>
-        
+
         <div style="font-size:14px; font-weight:bold; margin-bottom:16px;">History & Diffs</div>
         <div style="font-size:11px; color:var(--text-sub); margin-bottom:16px; background:var(--hover); padding:8px; border-radius:4px;">
             <span style="color:#24292e; background:#e6ffec; padding:0 4px;">Green</span> = Content in this version (will be restored)<br>
@@ -902,6 +1148,229 @@ function initBmc() {
     });
 }
 
+// Export/Import Functions
+async function exportNotes() {
+    const data = {
+        version: '1.0',
+        exportDate: new Date().toISOString(),
+        notes: items
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `gitnotes-backup-${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('Notes exported successfully!');
+}
+
+async function importNotes() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'application/json';
+    input.onchange = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        try {
+            const text = await file.text();
+            const data = JSON.parse(text);
+
+            if (!data.notes || !Array.isArray(data.notes)) {
+                showToast('Invalid backup file format!');
+                return;
+            }
+
+            const importCount = data.notes.length;
+            if (!confirm(`Import ${importCount} notes? This will add to your existing notes.`)) return;
+
+            for (const note of data.notes) {
+                await storage.update(note);
+            }
+
+            await loadItems();
+            showToast(`Successfully imported ${importCount} notes!`);
+        } catch (err) {
+            showToast('Error importing notes: ' + err.message);
+        }
+    };
+    input.click();
+}
+
+function showToast(message, duration = 3000) {
+    const toastMessage = document.getElementById('toastMessage');
+    toastMessage.textContent = message;
+    toast.classList.add('visible');
+    setTimeout(() => toast.classList.remove('visible'), duration);
+}
+
+// Statistics Dashboard
+function showStatistics() {
+    const totalNotes = items.length;
+    const totalChars = items.reduce((sum, item) => sum + item.content.length, 0);
+    const totalTags = new Set(items.flatMap(i => i.tags)).size;
+    const pinnedNotes = items.filter(i => i.isPinned).length;
+    const codeNotes = items.filter(i => detectType(i.content).type === 'code').length;
+    const linkNotes = items.filter(i => detectType(i.content).type === 'link').length;
+    const repoCount = new Set(items.map(i => i.repoId).filter(Boolean)).size;
+
+    const oldestNote = items.length > 0 ? new Date(Math.min(...items.map(i => i.timestamp))) : null;
+    const newestNote = items.length > 0 ? new Date(Math.max(...items.map(i => i.timestamp))) : null;
+
+    const avgLength = totalNotes > 0 ? Math.round(totalChars / totalNotes) : 0;
+
+    const topTags = Object.entries(
+        items.flatMap(i => i.tags).reduce((acc, tag) => {
+            acc[tag] = (acc[tag] || 0) + 1;
+            return acc;
+        }, {})
+    ).sort((a, b) => b[1] - a[1]).slice(0, 5);
+
+    activePanelItem = { id: 'stats' };
+
+    document.getElementById('panelMeta').innerHTML = `
+        <span style="display:flex; align-items:center; gap:6px;">${Icons.barChart} STATISTICS</span>
+    `;
+
+    document.getElementById('panelActions').innerHTML = `
+        <button data-action="close" data-tooltip="Close">${Icons.close}</button>
+    `;
+
+    document.getElementById('panelContent').innerHTML = `
+        <div style="display:flex; flex-direction:column; gap:24px;">
+            <div>
+                <h2 style="font-size:18px; font-weight:700; margin:0 0 16px 0; font-family:var(--font-sans);">Overview</h2>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                    <div style="background:var(--hover); padding:16px; border-radius:8px;">
+                        <div style="font-size:32px; font-weight:700; color:var(--text);">${totalNotes}</div>
+                        <div style="font-size:12px; color:var(--text-sub); margin-top:4px;">Total Notes</div>
+                    </div>
+                    <div style="background:var(--hover); padding:16px; border-radius:8px;">
+                        <div style="font-size:32px; font-weight:700; color:var(--text);">${repoCount}</div>
+                        <div style="font-size:12px; color:var(--text-sub); margin-top:4px;">Repositories</div>
+                    </div>
+                    <div style="background:var(--hover); padding:16px; border-radius:8px;">
+                        <div style="font-size:32px; font-weight:700; color:var(--text);">${totalTags}</div>
+                        <div style="font-size:12px; color:var(--text-sub); margin-top:4px;">Unique Tags</div>
+                    </div>
+                    <div style="background:var(--hover); padding:16px; border-radius:8px;">
+                        <div style="font-size:32px; font-weight:700; color:var(--text);">${pinnedNotes}</div>
+                        <div style="font-size:12px; color:var(--text-sub); margin-top:4px;">Pinned Notes</div>
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <h2 style="font-size:18px; font-weight:700; margin:0 0 16px 0; font-family:var(--font-sans);">Content Types</h2>
+                <div style="display:flex; flex-direction:column; gap:8px;">
+                    <div style="display:flex; justify-content:space-between; padding:8px; background:var(--hover); border-radius:4px;">
+                        <span>${Icons.typeText} Text Notes</span>
+                        <span style="font-weight:600;">${totalNotes - codeNotes - linkNotes}</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; padding:8px; background:var(--hover); border-radius:4px;">
+                        <span>${Icons.typeCode} Code Snippets</span>
+                        <span style="font-weight:600;">${codeNotes}</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; padding:8px; background:var(--hover); border-radius:4px;">
+                        <span>${Icons.typeLink} Links</span>
+                        <span style="font-weight:600;">${linkNotes}</span>
+                    </div>
+                </div>
+            </div>
+
+            ${topTags.length > 0 ? `
+            <div>
+                <h2 style="font-size:18px; font-weight:700; margin:0 0 16px 0; font-family:var(--font-sans);">Top Tags</h2>
+                <div style="display:flex; flex-direction:column; gap:8px;">
+                    ${topTags.map(([tag, count]) => `
+                        <div style="display:flex; justify-content:space-between; align-items:center; padding:8px; background:var(--hover); border-radius:4px;">
+                            <span style="font-weight:500;">#${escapeHtml(tag)}</span>
+                            <span style="background:var(--text); color:var(--bg); padding:2px 8px; border-radius:12px; font-size:11px; font-weight:600;">${count}</span>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+            ` : ''}
+
+            <div>
+                <h2 style="font-size:18px; font-weight:700; margin:0 0 16px 0; font-family:var(--font-sans);">Activity</h2>
+                <div style="display:flex; flex-direction:column; gap:8px; font-size:13px;">
+                    <div style="padding:8px; background:var(--hover); border-radius:4px;">
+                        <strong>Average Note Length:</strong> ${avgLength} characters
+                    </div>
+                    ${oldestNote ? `
+                    <div style="padding:8px; background:var(--hover); border-radius:4px;">
+                        <strong>First Note:</strong> ${oldestNote.toLocaleDateString()}
+                    </div>
+                    ` : ''}
+                    ${newestNote ? `
+                    <div style="padding:8px; background:var(--hover); border-radius:4px;">
+                        <strong>Latest Note:</strong> ${newestNote.toLocaleDateString()}
+                    </div>
+                    ` : ''}
+                </div>
+            </div>
+        </div>
+    `;
+
+    document.getElementById('panelFooter').innerHTML = '';
+    sidePanel.classList.add('visible');
+    sidePanelOverlay.classList.add('visible');
+}
+
+// Keyboard Shortcuts Help
+function showKeyboardShortcuts() {
+    activePanelItem = { id: 'help' };
+
+    document.getElementById('panelMeta').innerHTML = `
+        <span style="display:flex; align-items:center; gap:6px;">${Icons.info} KEYBOARD SHORTCUTS</span>
+    `;
+
+    document.getElementById('panelActions').innerHTML = `
+        <button data-action="close" data-tooltip="Close">${Icons.close}</button>
+    `;
+
+    const shortcuts = [
+        { keys: 'Cmd/Ctrl + Enter', desc: 'Save current note or edit' },
+        { keys: 'Cmd/Ctrl + Shift + K', desc: 'Focus note input' },
+        { keys: 'Cmd/Ctrl + Shift + L', desc: 'Toggle theme' },
+        { keys: 'Escape', desc: 'Close side panel' },
+        { keys: 'Enter', desc: 'Save tag input (when focused)' }
+    ];
+
+    document.getElementById('panelContent').innerHTML = `
+        <div style="display:flex; flex-direction:column; gap:16px;">
+            <p style="font-family:var(--font-sans); color:var(--text-sub); margin:0;">
+                Use these keyboard shortcuts to navigate GitNotes faster:
+            </p>
+            <div style="display:flex; flex-direction:column; gap:12px;">
+                ${shortcuts.map(({ keys, desc }) => `
+                    <div style="display:flex; justify-content:space-between; align-items:center; padding:12px; background:var(--hover); border-radius:4px;">
+                        <span style="font-family:var(--font-sans); font-size:13px;">${desc}</span>
+                        <kbd style="background:var(--bg); border:1px solid var(--border); padding:4px 8px; border-radius:4px; font-family:var(--font-mono); font-size:11px; white-space:nowrap;">${keys}</kbd>
+                    </div>
+                `).join('')}
+            </div>
+
+            <div style="margin-top:16px; padding:16px; background:var(--hover); border-radius:8px; border-left:3px solid var(--text);">
+                <h3 style="font-size:14px; font-weight:600; margin:0 0 8px 0; font-family:var(--font-sans);">Tips</h3>
+                <ul style="margin:0; padding-left:20px; font-size:13px; line-height:1.8; font-family:var(--font-sans);">
+                    <li>Double-click a note to open its repository</li>
+                    <li>Click repo badges to navigate to GitHub</li>
+                    <li>Use tags to organize related notes</li>
+                    <li>Pin important notes to keep them at the top</li>
+                    <li>Export your notes regularly for backup</li>
+                </ul>
+            </div>
+        </div>
+    `;
+
+    document.getElementById('panelFooter').innerHTML = '';
+    sidePanel.classList.add('visible');
+    sidePanelOverlay.classList.add('visible');
+}
+
 // Init
 async function loadItems() {
     items = await storage.getAll();
@@ -910,6 +1379,140 @@ async function loadItems() {
 
 searchInput.addEventListener('input', render);
 
+// New Button Listeners
+exportBtn.addEventListener('click', exportNotes);
+exportBtn.innerHTML = Icons.download;
+
+importBtn.addEventListener('click', importNotes);
+importBtn.innerHTML = Icons.upload;
+
+statsBtn.addEventListener('click', showStatistics);
+statsBtn.innerHTML = Icons.barChart;
+
+helpBtn.addEventListener('click', showKeyboardShortcuts);
+helpBtn.innerHTML = Icons.info;
+
+// Bulk Operations
+function toggleBulkMode() {
+    bulkMode = !bulkMode;
+    selectedItems.clear();
+    updateBulkUI();
+    render();
+}
+
+function toggleItemSelection(id) {
+    if (selectedItems.has(id)) {
+        selectedItems.delete(id);
+    } else {
+        selectedItems.add(id);
+    }
+    updateBulkUI();
+    render();
+}
+
+function updateBulkUI() {
+    bulkActionsBar.style.display = bulkMode ? 'flex' : 'none';
+    bulkSelectionCount.textContent = `${selectedItems.size} selected`;
+    bulkModeBtn.style.background = bulkMode ? 'var(--text)' : 'none';
+    bulkModeBtn.style.color = bulkMode ? 'var(--bg)' : 'var(--text-sub)';
+}
+
+async function bulkAddTag() {
+    if (selectedItems.size === 0) {
+        showToast('No notes selected');
+        return;
+    }
+    const tag = prompt('Enter tag name:');
+    if (!tag || !tag.trim()) return;
+
+    for (const id of selectedItems) {
+        const item = items.find(i => i.id === id);
+        if (item && !item.tags.includes(tag.trim())) {
+            item.tags.push(tag.trim());
+            await storage.update(item);
+        }
+    }
+    await loadItems();
+    showToast(`Tag added to ${selectedItems.size} notes`);
+}
+
+async function bulkPin() {
+    if (selectedItems.size === 0) {
+        showToast('No notes selected');
+        return;
+    }
+    for (const id of selectedItems) {
+        const item = items.find(i => i.id === id);
+        if (item) {
+            item.isPinned = true;
+            await storage.update(item);
+        }
+    }
+    await loadItems();
+    showToast(`${selectedItems.size} notes pinned`);
+}
+
+async function bulkExport() {
+    if (selectedItems.size === 0) {
+        showToast('No notes selected');
+        return;
+    }
+    const selectedNotes = items.filter(i => selectedItems.has(i.id));
+    const data = {
+        version: '1.0',
+        exportDate: new Date().toISOString(),
+        notes: selectedNotes
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `gitnotes-selection-${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast(`${selectedItems.size} notes exported`);
+}
+
+async function bulkDelete() {
+    if (selectedItems.size === 0) {
+        showToast('No notes selected');
+        return;
+    }
+    if (!confirm(`Delete ${selectedItems.size} selected notes?`)) return;
+
+    for (const id of selectedItems) {
+        await storage.delete(id);
+    }
+    selectedItems.clear();
+    updateBulkUI();
+    await loadItems();
+    showToast('Selected notes deleted');
+}
+
+function bulkDeselect() {
+    selectedItems.clear();
+    updateBulkUI();
+    render();
+}
+
+bulkModeBtn.addEventListener('click', toggleBulkMode);
+bulkModeBtn.innerHTML = Icons.checkSquare;
+
+bulkTagBtn.addEventListener('click', bulkAddTag);
+bulkTagBtn.innerHTML = Icons.plus;
+
+bulkPinBtn.addEventListener('click', bulkPin);
+bulkPinBtn.innerHTML = Icons.pin;
+
+bulkExportBtn.addEventListener('click', bulkExport);
+bulkExportBtn.innerHTML = Icons.download;
+
+bulkDeleteBtn.addEventListener('click', bulkDelete);
+bulkDeleteBtn.innerHTML = Icons.trash;
+
+bulkDeselectBtn.addEventListener('click', bulkDeselect);
+bulkDeselectBtn.innerHTML = Icons.close;
+
 (async () => {
     setTheme(theme);
     setLayout(layout);
@@ -917,5 +1520,5 @@ searchInput.addEventListener('input', render);
     initBmc();
     await storage.init();
     await loadItems();
-    await detectGitHubRepo();
+    await detectGitHubContext();
 })();
