@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GitNotes</title>
+    <link rel="stylesheet" href="sidepanel.css">
+</head>
+
+<body>
+
+    <div class="container">
+        <header>
+            <div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <h1>GitNotes</h1>
+                    <span
+                        style="font-size: 10px; background: #2e7d32; color: #ffffff; padding: 2px 6px; border-radius: 4px; font-weight: bold; letter-spacing: 0.5px;">LOCAL</span>
+                </div>
+                <span class="subtitle">Context-aware GitHub Notes</span>
+            </div>
+            <div class="controls">
+                <!-- Repo Toggle -->
+                <button id="repoFilterBtn" class="icon-btn" data-tooltip="Toggle Repo Filter">
+                    <!-- Injected -->
+                </button>
+
+                <div style="width: 1px; height: 20px; background: var(--border); margin: 0 4px;"></div>
+
+                <button id="layoutBtn" class="icon-btn" data-tooltip="Toggle Layout">
+                    <!-- Injected -->
+                </button>
+                <button id="densityBtn" class="icon-btn" data-tooltip="Toggle Density">
+                    <!-- Injected -->
+                </button>
+                <button id="clearBtn" class="icon-btn" data-tooltip="Delete All Items" style="color: var(--accent);">
+                    <svg viewBox="0 0 24 24">
+                        <polyline points="3 6 5 6 21 6"></polyline>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    </svg>
+                </button>
+                <button class="icon-btn" id="themeBtn" data-tooltip="Toggle Theme">
+                    <!-- Injected -->
+                </button>
+            </div>
+        </header>
+
+        <div id="repoContextDisplay" class="repo-context" style="display:none;">
+            <svg viewBox="0 0 24 24">
+                <path
+                    d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22">
+                </path>
+            </svg>
+            <span id="repoName">No Repository Detected</span>
+        </div>
+
+        <div class="input-area"
+            style="display: flex; flex-direction: column; gap: 12px; background: var(--hover); padding: 16px; border-radius: var(--radius); border: 1px solid var(--border);">
+            <input type="text" id="titleInput" placeholder="Title (optional)..."
+                style="width: 100%; background: none; border: none; font-family: var(--font-sans); font-size: 14px; font-weight: 600; color: var(--text); outline: none; padding-bottom: 8px; border-bottom: 1px solid var(--border);">
+            <textarea id="manualInput" placeholder="Type or paste content here..."
+                style="width: 100%; min-height: 80px; background: none; border: none; resize: vertical; font-family: var(--font-mono); font-size: 13px; color: var(--text); outline: none;"></textarea>
+            <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px;">
+                <div style="display: flex; align-items: center; gap: 8px; flex: 1;">
+                    <svg viewBox="0 0 24 24" style="width: 16px; height: 16px; color: var(--text-sub);">
+                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                    </svg>
+                    <input type="text" id="tagInput" list="tagSuggestions" placeholder="Tags..."
+                        style="background: none; border: none; font-size: 12px; color: var(--text); width: 100%; outline: none;">
+                </div>
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <span id="charCount" style="font-size: 11px; color: var(--text-sub);">0 chars</span>
+                    <button id="saveBtn"
+                        style="font-size: 12px; background: var(--text); color: var(--bg); padding: 6px 12px; white-space: nowrap;"
+                        data-tooltip="Save (Cmd+Enter)">Save</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="search-bar">
+            <svg viewBox="0 0 24 24">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input type="text" id="searchInput" placeholder="Search...">
+        </div>
+
+        <div id="listContainer" class="list-container">
+            <!-- Items injected by JS -->
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast" class="toast">
+        <span id="toastMessage">Item deleted</span>
+        <button id="undoBtn">Undo</button>
+    </div>
+
+    <!-- Side Panel (Inner) -->
+    <div id="sidePanelOverlay" class="side-panel-overlay"></div>
+    <div id="sidePanel" class="side-panel">
+        <div class="panel-header">
+            <div class="panel-meta" id="panelMeta">
+                <!-- Injected -->
+            </div>
+            <div class="panel-actions" id="panelActions">
+                <!-- Injected -->
+            </div>
+        </div>
+        <div class="panel-content" id="panelContent">
+            <!-- Injected -->
+        </div>
+        <div class="panel-footer" id="panelFooter">
+            <!-- Injected -->
+        </div>
+    </div>
+
+    <!-- Datalist for Tags -->
+    <datalist id="tagSuggestions"></datalist>
+
+    <!-- Buy Me a Coffee Widget -->
+    <div id="bmcWidget" class="bmc-widget">
+        <a href="https://buymeacoffee.com/paraskoundal" target="_blank" class="bmc-link" id="bmcLink">
+            <span style="font-size:16px;">☕</span>
+            <span class="bmc-text">Buy me a coffee</span>
+        </a>
+        <button id="bmcClose" class="bmc-close" title="Minimize">×</button>
+    </div>
+
+    <script src="sidepanel.js"></script>
+</body>
+
+</html>
