@@ -25,6 +25,10 @@
                 <button id="repoFilterBtn" class="icon-btn" data-tooltip="Toggle Repo Filter">
                     <!-- Injected -->
                 </button>
+                <!-- File Filter -->
+                <button id="fileFilterBtn" class="icon-btn" data-tooltip="Toggle File Filter" style="font-family:monospace; font-size:12px;">
+                    ./
+                </button>
 
                 <div style="width: 1px; height: 20px; background: var(--border); margin: 0 4px;"></div>
 
@@ -34,6 +38,24 @@
                 <button id="densityBtn" class="icon-btn" data-tooltip="Toggle Density">
                     <!-- Injected -->
                 </button>
+
+                <div style="width: 1px; height: 20px; background: var(--border); margin: 0 4px;"></div>
+
+                <button id="exportBtn" class="icon-btn" data-tooltip="Export Notes">
+                    <!-- Injected -->
+                </button>
+                <button id="importBtn" class="icon-btn" data-tooltip="Import Notes">
+                    <!-- Injected -->
+                </button>
+                <button id="statsBtn" class="icon-btn" data-tooltip="View Statistics">
+                    <!-- Injected -->
+                </button>
+                <button id="helpBtn" class="icon-btn" data-tooltip="Keyboard Shortcuts">
+                    <!-- Injected -->
+                </button>
+
+                <div style="width: 1px; height: 20px; background: var(--border); margin: 0 4px;"></div>
+
                 <button id="clearBtn" class="icon-btn" data-tooltip="Delete All Items" style="color: var(--accent);">
                     <svg viewBox="0 0 24 24">
                         <polyline points="3 6 5 6 21 6"></polyline>
@@ -85,6 +107,31 @@
                 <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
             </svg>
             <input type="text" id="searchInput" placeholder="Search...">
+            <button id="bulkModeBtn" class="icon-btn" data-tooltip="Bulk Select Mode" style="margin-left:auto;">
+                <!-- Injected -->
+            </button>
+        </div>
+
+        <!-- Bulk Actions Bar -->
+        <div id="bulkActionsBar" style="display:none; background:var(--hover); padding:12px; border-radius:4px; border:1px solid var(--border); align-items:center; gap:12px;">
+            <span id="bulkSelectionCount" style="font-size:13px; font-weight:600;">0 selected</span>
+            <div style="display:flex; gap:8px; margin-left:auto;">
+                <button id="bulkTagBtn" class="icon-btn" data-tooltip="Add Tag to Selected">
+                    <!-- Injected -->
+                </button>
+                <button id="bulkPinBtn" class="icon-btn" data-tooltip="Pin Selected">
+                    <!-- Injected -->
+                </button>
+                <button id="bulkExportBtn" class="icon-btn" data-tooltip="Export Selected">
+                    <!-- Injected -->
+                </button>
+                <button id="bulkDeleteBtn" class="icon-btn" data-tooltip="Delete Selected" style="color:var(--accent);">
+                    <!-- Injected -->
+                </button>
+                <button id="bulkDeselectBtn" class="icon-btn" data-tooltip="Deselect All">
+                    <!-- Injected -->
+                </button>
+            </div>
         </div>
 
         <div id="listContainer" class="list-container">
